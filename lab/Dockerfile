@@ -1,4 +1,4 @@
-FROM python:3.13-slim-bookworm
+﻿FROM python:3.13-slim-bookworm
 
 WORKDIR /app
 
@@ -8,10 +8,11 @@ COPY app.py index.html ./
 
 RUN mkdir /data && chown 10001:10001 /data
 
-LABEL course.student="не-выдан"
+LABEL course.student="12072008"
 
 USER 10001:10001
 
 EXPOSE 8000
 
 CMD ["python", "app.py"]
+
