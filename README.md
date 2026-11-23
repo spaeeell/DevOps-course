@@ -49,3 +49,107 @@
 **Обычные команды выполняются из корня вашей копии репозитория.** Команды внутри Linux-контейнера явно отмечены. Не устанавливайте ПО на компьютеры кабинета самостоятельно. Если Docker недоступен, сообщите преподавателю.
 
 Преподавателю: [подготовка кабинета](teacher/PREFLIGHT.md), [план курса](teacher/PROGRAM_MAP.md), [отчёт о проверке](teacher/VALIDATION.md).
+
+
+
+
+## Мой результат
+
+Группа: ИТ-9.24.2  
+Код студента: 12072008
+
+### 1. Сборка и запуск
+
+Из корня репозитория собрать Docker-образ:
+
+```bash
+docker build -f lab/Dockerfile -t devops-student:v1 lab
+```
+
+Запустить приложение и мониторинг:
+
+```bash
+docker compose -f compose.student.yaml --profile monitoring up -d
+docker compose -f compose.student.yaml --profile monitoring ps
+```
+
+Адреса:
+- Приложение: http://localhost:8080
+- Проверка процесса: http://localhost:8080/health
+- Список заявок: http://localhost:8080/api/requests
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3000
+
+### 2. Автоматические проверки и Docker
+
+Исходники хранятся в GitHub. Workflow `.github/workflows/student-ci.yml` запускает тесты, затем собирает Docker-образ.
+
+Задача build зависит от test через `needs: test`.
+
+Успешный CI: https://github.com/spaeeell/DevOps-course/actions/runs/42379799167
+
+Commit SHA: `19fa231ee13ac4ea4b6773337861dec8e797ba35`.
+
+### 3. Сеть и данные
+
+Контейнер web доступен на порту 8080 компьютера и обращается к api по внутреннему адресу `http://api:8000`.
+
+API сохраняет заявки в именованный Docker volume `requests`. При обычной остановке и повторном запуске контейнера данные сохраняются.
+
+### 4. Мониторинг
+
+Prometheus собирает метрики с `api:8000` и `web:8000`.
+
+Запрос `up{job="workshop"}` показывает доступность целей сбора метрик.
+
+Grafana визуализирует скорость успешных запросов:
+
+```promql
+rate(devops_http_requests_total{role="web",status="200"}[1m])
+```
+
+Dashboard экспортирован в [K4-02-dashboard.json](evidence/K4-02-dashboard.json).
+
+### 5. Ansible
+
+Сборка образа Ansible:
+
+```bash
+docker build -f docker/ansible.Dockerfile -t devops-course-ansible:base .
+```
+
+Применение конфигурации:
+
+```bash
+docker compose -f compose.student.yaml run --rm ansible banner.yml
+```
+
+Playbook `ansible/banner.yml` создаёт `/data/banner.txt` с правами 0644 и владельцем 10001.
+
+Повторный запуск без изменений даёт `changed=0`. Результат доступен по адресу http://localhost:8080/api/banner.
+
+### 6. Инцидент и восстановление
+
+При остановке API веб-приложение возвращало HTTP 503. В логах обнаружено событие `upstream_unavailable`, а Prometheus зафиксировал недоступность API.
+
+Восстановление:
+
+```bash
+docker compose -f compose.student.yaml start api
+```
+
+После восстановления старая заявка сохранилась, новая успешно создана.
+
+### 7. Отчёты КТ4
+
+- [K4-01 — Логи и доступность](evidence/K4-01.md)
+- [K4-02 — Prometheus и Grafana](evidence/K4-02.md)
+- [K4-03 — Ansible](evidence/K4-03.md)
+- [K4-04 — Инцидент и восстановление](evidence/K4-04.md)
+- [K4-05 — Итоговая защита](evidence/K4-05.md)
+
+### 8. Общая цепочка
+
+Исходники → автоматические тесты → Docker-образ → контейнеры web и api → метрики Prometheus и Grafana → диагностика сбоя → восстановление сервиса.
+
+Перед реальным выпуском дополнительно нужны проверка безопасности, нагрузочное тестирование, проверка резервных копий и тестирование восстановления на отдельном окружении.
